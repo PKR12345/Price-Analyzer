@@ -7,8 +7,6 @@ from openpyxl.chart.trendline import Trendline
 from openpyxl.drawing.colors import ColorChoice
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.styles import Font
-from openpyxl.drawing.colors import ColorChoice
-from openpyxl.drawing.fill import PatternFillProperties
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -103,9 +101,6 @@ def generate_charts(wb, x_col_index, y_col_index_1, y_col_index_2, config_dict, 
         scatter_chart.scatterStyle = None
         
         series = Series(yvalues, xvalues, title="Price Index vs Share of Volume")
-        series.marker.symbol = 'circle'
-        series.marker.graphicalProperties.solidFill = ColorChoice(prstClr="blue")
-        
         scatter_chart.series.append(series)
         scatter_chart.x_axis.major_gridlines = None
         scatter_chart.y_axis.major_gridlines = None
@@ -118,7 +113,7 @@ def generate_charts(wb, x_col_index, y_col_index_1, y_col_index_2, config_dict, 
 
         trendline = Trendline()
         trendline.type = "linear" 
-        # trendline.spPr = GraphicalProperties(solidFill=ColorChoice(prstClr="orange"))
+        trendline.spPr = GraphicalProperties(solidFill=ColorChoice(prstClr="orange"))
         series.trendline = trendline
         
         ws[header_index].value = header
