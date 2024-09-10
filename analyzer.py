@@ -113,7 +113,7 @@ def generate_charts(wb, x_col_index, y_col_index_1, y_col_index_2, config_dict, 
 
         trendline = Trendline()
         trendline.type = "linear" 
-        trendline.spPr = GraphicalProperties(solidFill=ColorChoice(prstClr="orange"))
+        # trendline.spPr = GraphicalProperties(solidFill=ColorChoice(prstClr="orange"))
         series.trendline = trendline
         
         ws[header_index].value = header
