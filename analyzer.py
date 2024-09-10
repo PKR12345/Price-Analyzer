@@ -104,7 +104,6 @@ def generate_charts(wb, x_col_index, y_col_index_1, y_col_index_2, config_dict, 
         
         series = Series(yvalues, xvalues, title="Price Index vs Share of Volume")
         series.marker.symbol = 'circle'
-        series.graphicalProperties.marker.symbol = "circle"  # Circle marker
         series.marker.graphicalProperties.solidFill = ColorChoice(prstClr="blue")
         
         scatter_chart.series.append(series)
