@@ -37,7 +37,7 @@ def filter(data, filters, num_filters, key_column):
             for k in filters:
                 option = st.selectbox(f"{j}- Select the Filter {i+1} for column {k}", data[k].unique())
                 options_dict[j][k] = option
-            query = " and ".join([f"{k} == '{options_dict[j][k]}'" for k in options_dict[j].keys()])
+            query = " and ".join([f"`{k}` == '{options_dict[j][k]}'" for k in options_dict[j].keys()])
             data_subset = data.query(query)
             data_subset = data_subset.groupby("Week End Date").agg({"Vol Share": "sum", "Average Unit Price": "mean"}).reset_index()
             data_subset.columns = ["Week End Date", f"Vol_Share_{j}", f"Average_Unit_Price_{j}"]
@@ -48,7 +48,7 @@ def filter(data, filters, num_filters, key_column):
             data_merged["Target_Brand Price ix"] = (data_merged["Average_Unit_Price_Target_Brand"]/data_merged["Average_Unit_Price_Competitor_Brand"])*100
             data_merged["Competitor_Brand Price ix"] = (data_merged["Average_Unit_Price_Competitor_Brand"]/data_merged["Average_Unit_Price_Target_Brand"])*100
             data_merged["Vol_Share_Total"] = data_merged["Vol_Share_Target_Brand"] + data_merged["Vol_Share_Competitor_Brand"]
-            key = str(options_dict["Target_Brand"]["Brand"][:3])+""+str(options_dict["Target_Brand"][key_column])+""+str(options_dict["Competitor_Brand"]["Brand"][:3])+"_"+str(options_dict["Competitor_Brand"][key_column])
+            key = str(options_dict["Target_Brand"]["Brand"][:3])+"_"+str(options_dict["Target_Brand"][key_column])+"_"+str(options_dict["Competitor_Brand"]["Brand"][:3])+"_"+str(options_dict["Competitor_Brand"][key_column])
             data_dict[key] = data_merged
             meta_dict[key] = options_dict
     return data_dict, meta_dict
@@ -189,13 +189,13 @@ def write_stats(wb, stats_dict, header, header_start, start_column_label, start_
 def display_stats(stats, stats_1):
     for key in stats.keys():
         st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
-        st.write(f"*Target Volume Share vs Price Index for {key}:*")
+        st.write(f"**Target Volume Share vs Price Index for {key}:**")
         st.markdown(f"Coefficient: {round(stats[key]['Coefficient'],3)}")
         st.markdown(f"Intercept: {round(stats[key]['Intercept'],2)}")
         st.markdown(f"r2: {round(stats[key]['r2'],2)}")
         st.markdown(f"correl: {round(stats[key]['correl'],2)}")
         st.markdown(f"Equation: y = {stats[key]['Coefficient']}x + {stats[key]['Intercept']}")
-        st.write(f"*Total Volume Share vs Price Index for {key}:*")
+        st.write(f"**Total Volume Share vs Price Index for {key}:**")
         st.markdown(f"Coefficient: {round(stats_1[key]['Coefficient'],3)}")
         st.markdown(f"Intercept: {round(stats_1[key]['Intercept'],2)}")
         st.markdown(f"r2: {round(stats_1[key]['r2'],2)}")
@@ -499,5 +499,5 @@ def main():
                 #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 #     )
                 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
