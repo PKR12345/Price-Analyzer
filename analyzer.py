@@ -23,34 +23,47 @@ import plotly.graph_objs as go
 import plotly.express as px
 from PIL import Image as PILImage
 import os
+import uuid
 
-def filter(data, filters, num_filters, key_column):
+def select_filters(data, filters, num_filters):
     filters_dict = {}
+    for i in range(num_filters):
+        st.subheader(f"Select Filter {i + 1}")
+        options_dict = {}
+        for j in ["Target_Brand", "Competitor_Brand"]:
+            st.session_state["data_copy_filter"]=data
+            options_dict[j] = {}
+            for k in filters:
+                data_copy_filter = st.session_state["data_copy_filter"]
+                option = st.selectbox(f"{j} - Select the Filter {i + 1} for column {k}", data_copy_filter[k].unique())
+                data_copy_filter = data_copy_filter[data_copy_filter[k]==option]
+                st.session_state["data_copy_filter"] = data_copy_filter
+                options_dict[j][k] = option
+        filters_dict[i] = options_dict
+    return filters_dict
+
+@st.cache_data
+def filter(data, filters_dict, num_filters, key_column):
     data_dict = {}
     meta_dict = {}
     for i in range(num_filters):
-        st.subheader(f"Select Filter {i + 1}")
-        filters_dict[i] = {}
-        options_dict = {}
+        options_dict = filters_dict[i]  # Access the correct options_dict level
+        filter_data = {}
         for j in ["Target_Brand", "Competitor_Brand"]:
-            options_dict[j] = {}
-            for k in filters:
-                option = st.selectbox(f"{j}- Select the Filter {i+1} for column {k}", data[k].unique())
-                options_dict[j][k] = option
             query = " and ".join([f"`{k}` == '{options_dict[j][k]}'" for k in options_dict[j].keys()])
             data_subset = data.query(query)
             data_subset = data_subset.groupby("Week End Date").agg({"Vol Share": "sum", "Average Unit Price": "mean"}).reset_index()
             data_subset.columns = ["Week End Date", f"Vol_Share_{j}", f"Average_Unit_Price_{j}"]
-            if not data_subset.empty:
-                filters_dict[i][j] = data_subset
-        if not filters_dict[i]["Target_Brand"].empty and not filters_dict[i]["Competitor_Brand"].empty:
-            data_merged = pd.merge(filters_dict[i]["Target_Brand"], filters_dict[i]["Competitor_Brand"], on="Week End Date", how="left")
-            data_merged["Target_Brand Price ix"] = (data_merged["Average_Unit_Price_Target_Brand"]/data_merged["Average_Unit_Price_Competitor_Brand"])*100
-            data_merged["Competitor_Brand Price ix"] = (data_merged["Average_Unit_Price_Competitor_Brand"]/data_merged["Average_Unit_Price_Target_Brand"])*100
-            data_merged["Vol_Share_Total"] = data_merged["Vol_Share_Target_Brand"] + data_merged["Vol_Share_Competitor_Brand"]
-            key = str(options_dict["Target_Brand"]["Brand"][:3])+"_"+str(options_dict["Target_Brand"][key_column])+"_"+str(options_dict["Competitor_Brand"]["Brand"][:3])+"_"+str(options_dict["Competitor_Brand"][key_column])
-            data_dict[key] = data_merged
-            meta_dict[key] = options_dict
+            filter_data[j] = data_subset
+        if filter_data["Target_Brand"].empty or filter_data["Competitor_Brand"].empty:
+            continue
+        data_merged = pd.merge(filter_data["Target_Brand"], filter_data["Competitor_Brand"], on="Week End Date", how="left")
+        data_merged["Target_Brand Price ix"] = (data_merged["Average_Unit_Price_Target_Brand"] / data_merged["Average_Unit_Price_Competitor_Brand"]) * 100
+        data_merged["Competitor_Brand Price ix"] = (data_merged["Average_Unit_Price_Competitor_Brand"] / data_merged["Average_Unit_Price_Target_Brand"]) * 100
+        data_merged["Vol_Share_Total"] = data_merged["Vol_Share_Target_Brand"] + data_merged["Vol_Share_Competitor_Brand"]
+        key = f"{options_dict['Target_Brand']['Brand'][:3]}_{options_dict['Target_Brand'][key_column]}_{options_dict['Competitor_Brand']['Brand'][:3]}_{options_dict['Competitor_Brand'][key_column]}"
+        data_dict[key] = data_merged
+        meta_dict[key] = options_dict
     return data_dict, meta_dict
 
 @st.cache_resource
@@ -142,6 +155,7 @@ def create_scatter_plot(df, x_column, y_column, x_lable, y_label, title):
     fig.add_scatter(x=df[x_column], y=p(x_numeric), mode='lines', name='Trendline', line=dict(color='red'))
 
     return fig
+
 def display_chart(data):
     for key in data.keys():
         img = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Target_Brand", "Price Index", "Target Brand Vol Share", "Target Brand Vol Share vs Price Index")
@@ -149,6 +163,7 @@ def display_chart(data):
         st.plotly_chart(img, caption='Price Index vs Target Brand Volume Share', use_column_width=True)
         img1 = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Total", "Price Index", "Total Vol Share", "Total Vol Share vs Price Index")
         st.plotly_chart(img1, caption='Price Index vs Total Volume Share', use_column_width=True)
+        
 @st.cache_resource
 def generate_stats(data_dict, x_column, y_column):
     stats_dict = {}
@@ -234,6 +249,21 @@ def gmm_clustering_optimal(data_dict, cols):
             min_volume=('Vol_Share_Target_Brand', 'min'),
             max_volume=('Vol_Share_Target_Brand', 'max')
         ).reset_index()
+        
+        correlations = []
+        slopes=[]
+        for corridor in corridor_summary['price_corridor']:
+            corridor_data = data_select[data_select['price_corridor'] == corridor]
+            correlation = corridor_data['Target_Brand Price ix'].corr(corridor_data['Vol_Share_Target_Brand'])
+            correlations.append(correlation)
+            X = corridor_data[['Target_Brand Price ix']]
+            y = corridor_data['Vol_Share_Target_Brand']
+            reg = LinearRegression().fit(X, y)
+            slope = reg.coef_[0]
+            slopes.append(slope)
+        corridor_summary['correlation'] = correlations
+        corridor_summary['slope'] = slopes
+        
         data_gmm[key] = data_select
         summary_gmm[key] = corridor_summary
         optimal_clusters_gmm[key] = optimal_n_components
@@ -259,6 +289,21 @@ def gmm_clustering_custom(data_dict, cols, num_clusters):
             min_volume=('Vol_Share_Target_Brand', 'min'),
             max_volume=('Vol_Share_Target_Brand', 'max')
         ).reset_index()
+        
+        correlations = []
+        slopes=[]
+        for corridor in corridor_summary['price_corridor']:
+            corridor_data = data_select[data_select['price_corridor'] == corridor]
+            correlation = corridor_data['Target_Brand Price ix'].corr(corridor_data['Vol_Share_Target_Brand'])
+            correlations.append(correlation)
+            X = corridor_data[['Target_Brand Price ix']]
+            y = corridor_data['Vol_Share_Target_Brand']
+            reg = LinearRegression().fit(X, y)
+            slope = reg.coef_[0]
+            slopes.append(slope)
+        corridor_summary['correlation'] = correlations
+        corridor_summary['slope'] = slopes
+        
         data_gmm[key] = data_select
         summary_gmm[key] = corridor_summary
     return data_gmm, summary_gmm
@@ -283,30 +328,6 @@ def plot_corridor(data_dict):
                 name=f'Corridor {corridor}'
             ))
         
-        # for corridor in range(unique_corridors):
-        #     lower_corridor_data = data_plot[data_plot['price_corridor'] == (corridor - 1)]
-        #     upper_corridor_data = data_plot[data_plot['price_corridor'] == corridor]
-            
-        #     lower_points = lower_corridor_data.tail(3)[['Target_Brand Price ix', 'Vol_Share_Target_Brand']].values
-        #     upper_points = upper_corridor_data.head(3)[['Target_Brand Price ix', 'Vol_Share_Target_Brand']].values
-            
-        #     boundary_points = np.vstack((lower_points, upper_points))
-        #     boundary_x = boundary_points[:, 0]
-        #     boundary_y = boundary_points[:, 1]
-            
-        #     if len(boundary_x) >= 3:  # Ensure we have at least 3 points for curve fitting
-        #         poly_coeff = np.polyfit(boundary_x, boundary_y, deg=2)  # Fit quadratic curve
-        #         boundary_x_smooth = np.linspace(boundary_x.min(), boundary_x.max(), 500)
-        #         boundary_y_smooth = np.polyval(poly_coeff, boundary_x_smooth)
-                
-        #         fig.add_trace(go.Scatter(
-        #             x=boundary_x_smooth,
-        #             y=boundary_y_smooth,
-        #             mode='lines',
-        #             line=dict(color="black", dash="dot", width=2),
-        #             showlegend=False
-        #         ))
-        
         fig.update_layout(
             title='Price Corridors',
             xaxis_title='Price Index',
@@ -325,6 +346,16 @@ def write_corridor_summary_streamlit(corridor_summary, plots_dict, optimal_clust
         st.dataframe(corridor_summary[key])
         st.write(f"Price Corridor Plot for {key}")
         st.plotly_chart(plots_dict[key], use_container_width=True)
+        corridor_summary_analyze = corridor_summary[key].copy()
+        corridor_summary_analyze.sort_values(by='correlation',inplace=True)
+        idx = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.7),"price_corridor"].unique()
+        idx1 = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.4)&(corridor_summary_analyze["correlation"]>-0.7),"price_corridor"].unique()
+        if idx.any() or idx1.any():
+            st.markdown("**Observations :**")
+            for id in idx:
+                st.write(f"The corridor no {id} has a high impact on the volume share")
+            for id in idx1:
+                st.write(f"The corridor no {id} has a decent impact on the volume share")
 
 def append_data_in_rows_openpyxl(wb, sheet_name, data_work, start_row, start_col):
     ws = wb[sheet_name]
@@ -345,12 +376,27 @@ def save_plot_as_image(fig):
 
 def insert_image_into_excel(img_stream, wb, name, position):
     ws = wb[name]
-    img = PILImage.open(img_stream)
-    img_for_excel_stream = BytesIO()
-    img.save(img_for_excel_stream, format='PNG')
-    img_for_excel_stream.seek(0)
-    img_for_excel = Image(img_for_excel_stream)
+    unique_filename = f"{uuid.uuid4()}.png"
+    with tempfile.NamedTemporaryFile(suffix=".png", name=unique_filename, delete=False) as tmp_file:
+        tmp_file.write(img_stream.read()) 
+        tmp_file.flush() 
+        img_for_excel = Image(tmp_file.name)
     ws.add_image(img_for_excel, position)
+    
+    return wb
+def add_img_bytes_to_sheet(img_stream, wb, name, cell) -> None:
+    ws = wb[name]
+    img = PILImage.open(img_stream)
+    image = openpyxl.drawing.image.Image(img)
+    def data_fillin(imgb):
+        bobj = img_stream.getbuffer().tobytes()
+        def wrap():
+            
+            return bobj
+        return wrap
+    image._data = data_fillin(img_stream)
+    image.anchor = cell
+    ws.add_image(image, cell)
     
     return wb
             
@@ -370,13 +416,13 @@ def write_corridor_summary_excel(wb, corridor_summary_optimal, corridor_summary_
         ws["AI4"].font = openpyxl.styles.Font(bold=True)
         wb = append_data_in_rows_openpyxl(wb, name, corridor_summary_optimal[name], 5, 35)
         ws = wb[name]
-        ws["AS4"].value = "Custom" 
-        ws["AS4"].font = openpyxl.styles.Font(bold=True)
-        wb = append_data_in_rows_openpyxl(wb, name, corridor_summary_custom[name], 5, 45)
-        img_stream = save_plot_as_image(plots_dict_optimal[name])
-        wb = insert_image_into_excel(img_stream, wb, name,"AI25")
-        img_stream = save_plot_as_image(plots_dict_custom[name])
-        wb = insert_image_into_excel(img_stream, wb, name, "AS25")
+        ws["AU4"].value = "Custom" 
+        ws["AU4"].font = openpyxl.styles.Font(bold=True)
+        wb = append_data_in_rows_openpyxl(wb, name, corridor_summary_custom[name], 5, 47)
+        # img_stream = save_plot_as_image(plots_dict_optimal[name])
+        # wb = insert_image_into_excel(img_stream, wb, name,"AI25")
+        # img_stream = save_plot_as_image(plots_dict_custom[name])
+        # wb = insert_image_into_excel(img_stream, wb, name, "AS25")
     return wb
 
 def main():
@@ -384,14 +430,23 @@ def main():
                        page_icon=":books:")
     st.header("Price Analyzer for Home Care")
     uploaded_data = st.sidebar.file_uploader("Upload the price data", accept_multiple_files=False, type=["xlsx", "csv"])
-    data = pd.read_excel(uploaded_data) if uploaded_data.name.endswith(".xlsx") else pd.read_csv(uploaded_data)
-    data['Week End Date'] = pd.to_datetime(data['Week End Date'])
+    if 'data' not in st.session_state or st.session_state['uploaded_file'] != uploaded_data:
+        if uploaded_data is not None:
+            data = pd.read_excel(uploaded_data) if uploaded_data.name.endswith(".xlsx") else pd.read_csv(uploaded_data)
+            data['Week End Date'] = pd.to_datetime(data['Week End Date'])
+            st.session_state['data'] = data
+            st.session_state['uploaded_file'] = uploaded_data
+        else:
+            st.warning("Please upload the data to proceed.")
+            return
+
+    data = st.session_state['data']
+
     filters = st.sidebar.multiselect("Select the colums for filters", data.columns)
     num_filters = st.sidebar.number_input("Number of filters", min_value=1, max_value=10)
     key_column = st.sidebar.selectbox("Select the column to use as key", data.columns)
     choose_option = st.sidebar.radio("Select the column combination for clustering", ["Price Index and Volume Share", "Price Index Only"], key="auto")
     num_clusters = st.sidebar.number_input("Enter the number of clusters for manual clustering", min_value=1, max_value=15, value=1, step=1)
-    data_dict, meta_dict = filter(data, filters, num_filters, key_column)
     if 'data_dict' not in st.session_state:
         st.session_state['data_dict'] = None
     if 'meta_dict' not in st.session_state:
@@ -414,6 +469,9 @@ def main():
         st.session_state['plots_dict_optimal'] = None
     if 'plots_dict_custom' not in st.session_state:
         st.session_state['plots_dict_custom'] = None
+    # data_dict, meta_dict = filter(data, filters, num_filters, key_column)
+    filters_dict = select_filters(data, filters, num_filters)
+    data_dict, meta_dict = filter(data, filters_dict, num_filters, key_column)
     config_dict = {}
     if st.button("Analyze"):
         with st.spinner("Analyzing..."):
@@ -489,15 +547,6 @@ def main():
                 wb_final.save(output)
                 output.seek(0)
                 st.download_button("Download Analysis", output, "Price_Analytics.xlsx", "xlsx")
-                # with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp_excel_file:
-                #     wb_final = st.session_state.wb
-                #     wb_final.save(tmp_excel_file.name)
-                #     st.download_button(
-                #         label="Download Excel with Plot",
-                #         data=tmp_excel_file.read(),
-                #         file_name="Price_Analytics.xlsx",
-                #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                #     )
                 
 if __name__ == "__main__":
     main()
