@@ -442,7 +442,7 @@ def main():
 
     data = st.session_state['data']
 
-    filters = st.sidebar.multiselect("Select the colums for filters. "
+    filters = st.sidebar.multiselect("Select the colums for filters.\n"
                                      "The columns should be selected in hierarchical order", data.columns)
     num_filters = st.sidebar.number_input("Number of filters", min_value=1, max_value=10)
     key_column = st.sidebar.selectbox("Select the column to use as key", data.columns)
