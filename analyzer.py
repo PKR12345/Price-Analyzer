@@ -27,19 +27,41 @@ import uuid
 
 def select_filters(data, filters, num_filters):
     filters_dict = {}
+    st.session_state.show_data_filter = {}
+    if 'filter_tabs' not in st.session_state:
+        st.session_state.filter_tabs = []
+    st.session_state.filter_tabs = [f"Analysis Task {i+1}" for i in range(num_filters)]
+    tabs = st.tabs(st.session_state.filter_tabs)
     for i in range(num_filters):
-        st.subheader(f"Select Filter {i + 1}")
-        options_dict = {}
-        for j in ["Target_Brand", "Competitor_Brand"]:
-            st.session_state["data_copy_filter"]=data
-            options_dict[j] = {}
-            for k in filters:
-                data_copy_filter = st.session_state["data_copy_filter"]
-                option = st.selectbox(f"{j} - Select the Filter {i + 1} for column {k}", data_copy_filter[k].unique())
-                data_copy_filter = data_copy_filter[data_copy_filter[k]==option]
-                st.session_state["data_copy_filter"] = data_copy_filter
-                options_dict[j][k] = option
-        filters_dict[i] = options_dict
+        with tabs[i]:
+            st.subheader(f"Select Filters for Analysis Task {i + 1}")
+            options_dict = {}
+            st.session_state.show_data_filter[i] = {}
+            for j in ["Target_Brand", "Competitor_Brand"]:
+                st.session_state["data_copy_filter"]=data
+                options_dict[j] = {}
+                if j=='Target_Brand':
+                    key_display = 'P&G'
+                else:
+                    key_display = 'Competitor'
+                st.write(f"**{key_display}:**")
+                st.session_state.show_data_filter[i][key_display]= data
+                for k in filters:
+                    data_copy_filter = st.session_state["data_copy_filter"]
+                    option = st.selectbox(f"{key_display} - For the task analysis {i + 1}, select the filter for column {k}", data_copy_filter[k].unique())
+                    data_copy_filter = data_copy_filter[data_copy_filter[k]==option]
+                    st.session_state["data_copy_filter"] = data_copy_filter
+                    st.session_state.show_data_filter[i][key_display] = data_copy_filter
+                    try:
+                        with st.expander(f"Task Analysis {i+1}: View Current {key_display} Avg Volume Share based on applied filters for {k}", expanded=False):
+                            data_1 = st.session_state.show_data_filter[i][key_display].groupby(filters[filters.index(k)+1:filters.index(k)+2]+['Week End Date'])['Vol Share'].sum().reset_index()
+                            data_2 = data_1.groupby(filters[filters.index(k)+1:filters.index(k)+2])['Vol Share'].mean().reset_index().sort_values(by='Vol Share', ascending=False)
+                            data_2['Vol Share % within selection'] = (data_2['Vol Share']/sum(data_2['Vol Share']))*100
+                            st.dataframe(data_2)
+                    except:
+                        pass
+                    options_dict[j][k] = option
+            filters_dict[i] = options_dict
     return filters_dict
 
 @st.cache_data
@@ -61,6 +83,7 @@ def filter(data, filters_dict, num_filters, key_column):
         data_merged["Target_Brand Price ix"] = (data_merged["Average_Unit_Price_Target_Brand"] / data_merged["Average_Unit_Price_Competitor_Brand"]) * 100
         data_merged["Competitor_Brand Price ix"] = (data_merged["Average_Unit_Price_Competitor_Brand"] / data_merged["Average_Unit_Price_Target_Brand"]) * 100
         data_merged["Vol_Share_Total"] = data_merged["Vol_Share_Target_Brand"] + data_merged["Vol_Share_Competitor_Brand"]
+        data_merged.fillna(0,inplace=True)
         key = f"{options_dict['Target_Brand']['Brand'][:3]}_{options_dict['Target_Brand'][key_column]}_{options_dict['Competitor_Brand']['Brand'][:3]}_{options_dict['Competitor_Brand'][key_column]}"
         data_dict[key] = data_merged
         meta_dict[key] = options_dict
@@ -78,6 +101,7 @@ def view_data(data_dict, meta_dict):
             st.write(f"{k} : {meta_dict[key]['Competitor_Brand'][k]}")
         st.write("Data:")
         st.dataframe(data_dict[key])
+        st.markdown("----")
     
 @st.cache_resource        
 def _add_data_worksheet(data_dict, meta_dict):
@@ -163,6 +187,7 @@ def display_chart(data):
         st.plotly_chart(img, caption='Price Index vs Target Brand Volume Share', use_column_width=True)
         img1 = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Total", "Price Index", "Total Vol Share", "Total Vol Share vs Price Index")
         st.plotly_chart(img1, caption='Price Index vs Total Volume Share', use_column_width=True)
+        st.markdown("----")
         
 @st.cache_resource
 def generate_stats(data_dict, x_column, y_column):
@@ -215,7 +240,8 @@ def display_stats(stats, stats_1):
         st.markdown(f"Intercept: {round(stats_1[key]['Intercept'],2)}")
         st.markdown(f"r2: {round(stats_1[key]['r2'],2)}")
         st.markdown(f"correl: {round(stats_1[key]['correl'],2)}")
-        st.markdown(f"Equation: y = {stats_1[key]['Coefficient']}x + {stats_1[key]['Intercept']}")
+        st.markdown(f"Equation: y = {round(stats_1[key]['Coefficient'],3)}x + {round(stats_1[key]['Intercept'],3)}")
+        st.markdown("----")
 
 # @st.cache_data
 def gmm_clustering_optimal(data_dict, cols):
@@ -356,6 +382,7 @@ def write_corridor_summary_streamlit(corridor_summary, plots_dict, optimal_clust
                 st.write(f"The corridor no {id} has a high impact on the volume share")
             for id in idx1:
                 st.write(f"The corridor no {id} has a decent impact on the volume share")
+        st.markdown("----")
 
 def append_data_in_rows_openpyxl(wb, sheet_name, data_work, start_row, start_col):
     ws = wb[sheet_name]
@@ -442,9 +469,12 @@ def main():
 
     data = st.session_state['data']
 
-    filters = st.sidebar.multiselect("Select the colums for filters.\n"
+    filters = st.sidebar.multiselect("Select the colums for filters"
                                      "The columns should be selected in hierarchical order", data.columns)
-    num_filters = st.sidebar.number_input("Number of filters", min_value=1, max_value=10)
+    if not filters:
+        st.warning("Please select the columns for filtering")
+        return
+    num_filters = st.sidebar.number_input("Number of Analysis Tasks", min_value=1, max_value=10)
     key_column = st.sidebar.selectbox("Select the column to use as key", data.columns)
     choose_option = st.sidebar.radio("Select the column combination for clustering", ["Price Index and Volume Share", "Price Index Only"], key="auto")
     num_clusters = st.sidebar.number_input("Enter the number of clusters for manual clustering", min_value=1, max_value=15, value=1, step=1)
@@ -484,31 +514,31 @@ def main():
             if st.session_state['analyzed']:
                 tab1, tab2, tab3, tab4 = st.tabs(["View Data", "View Scatter Plots", "View Statistics", "Price Corridors"])
                 with tab1:
-                    view_data(data_dict, meta_dict) 
-                    wb1 = _add_data_worksheet(data_dict, meta_dict)
+                    view_data(st.session_state.data_dict, meta_dict) 
+                    wb1 = _add_data_worksheet(st.session_state.data_dict, meta_dict)
                     st.session_state.wb = wb1
                 with tab2:
                     limit_dict = {}
-                    for key in data_dict.keys():
+                    for key in st.session_state.data_dict.keys():
                         limit_dict[key] = {}
-                        limit_dict[key]['x'] = [(data_dict[key]['Target_Brand Price ix'].min())*0.9, (data_dict[key]['Target_Brand Price ix'].max())*1.1]
-                        limit_dict[key]['y'] = [(data_dict[key]['Vol_Share_Target_Brand'].min())*0.9, (data_dict[key]['Vol_Share_Target_Brand'].max())*1.1]
+                        limit_dict[key]['x'] = [(st.session_state.data_dict[key]['Target_Brand Price ix'].min())*0.9, (st.session_state.data_dict[key]['Target_Brand Price ix'].max())*1.1]
+                        limit_dict[key]['y'] = [(st.session_state.data_dict[key]['Vol_Share_Target_Brand'].min())*0.9, (st.session_state.data_dict[key]['Vol_Share_Target_Brand'].max())*1.1]
                     wb2 = generate_charts(st.session_state.wb, 2, 2, 6, config_dict, "Target Brand Vol Share vs Price Index:", "N9", "N10", limit_dict)
                     st.session_state.wb = wb2
                     
                     limit_dict = {}
-                    for key in data_dict.keys():
+                    for key in st.session_state.data_dict.keys():
                         limit_dict[key] = {}
-                        limit_dict[key]['x'] = [(data_dict[key]['Target_Brand Price ix'].min())*0.9, (data_dict[key]['Target_Brand Price ix'].max())*1.1]
-                        limit_dict[key]['y'] = [(data_dict[key]['Vol_Share_Total'].min())*0.9, (data_dict[key]['Vol_Share_Total'].max())*1.1]
+                        limit_dict[key]['x'] = [(st.session_state.data_dict[key]['Target_Brand Price ix'].min())*0.9, (st.session_state.data_dict[key]['Target_Brand Price ix'].max())*1.1]
+                        limit_dict[key]['y'] = [(st.session_state.data_dict[key]['Vol_Share_Total'].min())*0.9, (st.session_state.data_dict[key]['Vol_Share_Total'].max())*1.1]
                     wb3 = generate_charts(st.session_state.wb, 2, 8, 6, config_dict, "Total Vol Share vs Price Index:", "X9", "X10", limit_dict)
                     st.session_state.wb = wb3
-                    display_chart(data_dict)
+                    display_chart(st.session_state.data_dict)
                 with tab3:
-                    stats = generate_stats(data_dict, "Target_Brand Price ix", "Vol_Share_Target_Brand")
+                    stats = generate_stats(st.session_state.data_dict, "Target_Brand Price ix", "Vol_Share_Target_Brand")
                     wb4 = write_stats(st.session_state.wb, stats, "Target Brand Stats", "N27", "N", "O", 28)
                     st.session_state.wb = wb4
-                    stats_1 = generate_stats(data_dict, "Target_Brand Price ix", "Vol_Share_Total")
+                    stats_1 = generate_stats(st.session_state.data_dict, "Target_Brand Price ix", "Vol_Share_Total")
                     wb5 = write_stats(st.session_state.wb, stats_1, "Target Brand Stats", "X27", "X", "Y", 28)
                     st.session_state.wb = wb5
                     display_stats(stats, stats_1)
@@ -517,10 +547,10 @@ def main():
                     with tab41:
                         # choose_option = st.radio("Select the column combination for clustering", ["Price Index and Volume Share", "Price Index Only"], key="auto")
                         if choose_option == "Price Index and Volume Share":
-                            data_summary_optimal, corridor_summary_optimal, optimal_clusters = gmm_clustering_optimal(data_dict, ["Target_Brand Price ix", "Vol_Share_Target_Brand"])
+                            data_summary_optimal, corridor_summary_optimal, optimal_clusters = gmm_clustering_optimal(st.session_state.data_dict, ["Target_Brand Price ix", "Vol_Share_Target_Brand"])
                             
                         else:
-                            data_summary_optimal, corridor_summary_optimal, optimal_clusters = gmm_clustering_optimal(data_dict, ["Target_Brand Price ix"])
+                            data_summary_optimal, corridor_summary_optimal, optimal_clusters = gmm_clustering_optimal(st.session_state.data_dict, ["Target_Brand Price ix"])
                         st.session_state['data_summary_optimal'] = data_summary_optimal
                         st.session_state['corridor_summary_optimal'] = corridor_summary_optimal
                         st.session_state['optimal_clusters'] = optimal_clusters
@@ -532,10 +562,10 @@ def main():
                         # choose_option = st.radio("Select the column combination for clustering", ["Price Index and Volume Share", "Price Index Only"], key="manual")
                         # num_clusters = st.number_input("Enter the number of clusters", min_value=1, max_value=15, value=1, step=1)
                         if choose_option == "Price Index and Volume Share":
-                            data_summary_custom, corridor_summary_custom= gmm_clustering_custom(data_dict, ["Target_Brand Price ix", "Vol_Share_Target_Brand"], num_clusters)
+                            data_summary_custom, corridor_summary_custom= gmm_clustering_custom(st.session_state.data_dict, ["Target_Brand Price ix", "Vol_Share_Target_Brand"], num_clusters)
                             
                         else:
-                            data_summary_custom, corridor_summary_custom= gmm_clustering_custom(data_dict, ["Target_Brand Price ix"], num_clusters)
+                            data_summary_custom, corridor_summary_custom= gmm_clustering_custom(st.session_state.data_dict, ["Target_Brand Price ix"], num_clusters)
                         st.session_state['data_summary_custom'] = data_summary_custom
                         st.session_state['corridor_summary_custom'] = corridor_summary_custom
                         plots_dict = plot_corridor(st.session_state["data_summary_custom"])
