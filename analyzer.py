@@ -91,17 +91,22 @@ def filter(data, filters_dict, num_filters, key_column):
 
 @st.cache_resource
 def view_data(data_dict, meta_dict):
+    if 'filter_tabs_view' not in st.session_state:
+        st.session_state.filter_tabs_view = []
+    st.session_state.filter_tabs_view = [key for key in data_dict.keys()]
+    tabs = st.tabs(st.session_state.filter_tabs_view)
     for key in data_dict.keys():
-        st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
-        st.write("Target Brand Filters:")
-        for k in meta_dict[key]["Target_Brand"].keys():
-            st.write(f"{k} : {meta_dict[key]['Target_Brand'][k]}")
-        st.write("Competitor Brand Filters:")
-        for k in meta_dict[key]["Competitor_Brand"].keys():
-            st.write(f"{k} : {meta_dict[key]['Competitor_Brand'][k]}")
-        st.write("Data:")
-        st.dataframe(data_dict[key])
-        st.markdown("----")
+        with tabs[st.session_state.filter_tabs_view.index(key)]:
+            st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
+            st.write("Target Brand Filters:")
+            for k in meta_dict[key]["Target_Brand"].keys():
+                st.write(f"{k} : {meta_dict[key]['Target_Brand'][k]}")
+            st.write("Competitor Brand Filters:")
+            for k in meta_dict[key]["Competitor_Brand"].keys():
+                st.write(f"{k} : {meta_dict[key]['Competitor_Brand'][k]}")
+            st.write("Data:")
+            st.dataframe(data_dict[key])
+            st.markdown("----")
     
 @st.cache_resource        
 def _add_data_worksheet(data_dict, meta_dict):
@@ -181,13 +186,18 @@ def create_scatter_plot(df, x_column, y_column, x_lable, y_label, title):
     return fig
 
 def display_chart(data):
+    if 'filter_tabs_scatter' not in st.session_state:
+        st.session_state.filter_tabs_scatter = []
+    st.session_state.filter_tabs_scatter = [key for key in data.keys()]
+    tabs = st.tabs(st.session_state.filter_tabs_scatter)
     for key in data.keys():
-        img = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Target_Brand", "Price Index", "Target Brand Vol Share", "Target Brand Vol Share vs Price Index")
-        st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
-        st.plotly_chart(img, caption='Price Index vs Target Brand Volume Share', use_column_width=True)
-        img1 = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Total", "Price Index", "Total Vol Share", "Total Vol Share vs Price Index")
-        st.plotly_chart(img1, caption='Price Index vs Total Volume Share', use_column_width=True)
-        st.markdown("----")
+        with tabs[st.session_state.filter_tabs_scatter.index(key)]:
+            img = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Target_Brand", "Price Index", "Target Brand Vol Share", "Target Brand Vol Share vs Price Index")
+            st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
+            st.plotly_chart(img, caption='Price Index vs Target Brand Volume Share', use_column_width=True)
+            img1 = create_scatter_plot(data[key], "Target_Brand Price ix", "Vol_Share_Total", "Price Index", "Total Vol Share", "Total Vol Share vs Price Index")
+            st.plotly_chart(img1, caption='Price Index vs Total Volume Share', use_column_width=True)
+            st.markdown("----")
         
 @st.cache_resource
 def generate_stats(data_dict, x_column, y_column):
@@ -227,21 +237,26 @@ def write_stats(wb, stats_dict, header, header_start, start_column_label, start_
     return wb
 
 def display_stats(stats, stats_1):
+    if 'filter_tabs_stats' not in st.session_state:
+        st.session_state.filter_tabs_stats = []
+    st.session_state.filter_tabs_stats = [key for key in stats.keys()]
+    tabs = st.tabs(st.session_state.filter_tabs_stats)
     for key in stats.keys():
-        st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
-        st.write(f"**Target Volume Share vs Price Index for {key}:**")
-        st.markdown(f"Coefficient: {round(stats[key]['Coefficient'],3)}")
-        st.markdown(f"Intercept: {round(stats[key]['Intercept'],2)}")
-        st.markdown(f"r2: {round(stats[key]['r2'],2)}")
-        st.markdown(f"correl: {round(stats[key]['correl'],2)}")
-        st.markdown(f"Equation: y = {stats[key]['Coefficient']}x + {stats[key]['Intercept']}")
-        st.write(f"**Total Volume Share vs Price Index for {key}:**")
-        st.markdown(f"Coefficient: {round(stats_1[key]['Coefficient'],3)}")
-        st.markdown(f"Intercept: {round(stats_1[key]['Intercept'],2)}")
-        st.markdown(f"r2: {round(stats_1[key]['r2'],2)}")
-        st.markdown(f"correl: {round(stats_1[key]['correl'],2)}")
-        st.markdown(f"Equation: y = {round(stats_1[key]['Coefficient'],3)}x + {round(stats_1[key]['Intercept'],3)}")
-        st.markdown("----")
+        with tabs[st.session_state.filter_tabs_stats.index(key)]:
+            st.markdown(f"<h3>{key}</h3>", unsafe_allow_html=True)
+            st.write(f"**Target Volume Share vs Price Index for {key}:**")
+            st.markdown(f"Coefficient: {round(stats[key]['Coefficient'],3)}")
+            st.markdown(f"Intercept: {round(stats[key]['Intercept'],2)}")
+            st.markdown(f"r2: {round(stats[key]['r2'],2)}")
+            st.markdown(f"correl: {round(stats[key]['correl'],2)}")
+            st.markdown(f"Equation: y = {stats[key]['Coefficient']}x + {stats[key]['Intercept']}")
+            st.write(f"**Total Volume Share vs Price Index for {key}:**")
+            st.markdown(f"Coefficient: {round(stats_1[key]['Coefficient'],3)}")
+            st.markdown(f"Intercept: {round(stats_1[key]['Intercept'],2)}")
+            st.markdown(f"r2: {round(stats_1[key]['r2'],2)}")
+            st.markdown(f"correl: {round(stats_1[key]['correl'],2)}")
+            st.markdown(f"Equation: y = {round(stats_1[key]['Coefficient'],3)}x + {round(stats_1[key]['Intercept'],3)}")
+            st.markdown("----")
 
 # @st.cache_data
 def gmm_clustering_optimal(data_dict, cols):
@@ -364,25 +379,30 @@ def plot_corridor(data_dict):
     return plot_dict
 
 def write_corridor_summary_streamlit(corridor_summary, plots_dict, optimal_clusters={}):
+    if 'filter_tabs_corridor' not in st.session_state:
+        st.session_state.filter_tabs_corridor = []
+    st.session_state.filter_tabs_corridor = [key for key in corridor_summary.keys()]
+    tabs = st.tabs(st.session_state.filter_tabs_corridor)
     for key in corridor_summary.keys():
-        st.markdown(f"<h3>{key} :</h3>", unsafe_allow_html=True)
-        if optimal_clusters!={}:
-            st.markdown(f"Optimal number of clusters for {key} is {optimal_clusters[key]}")
-        st.write(f"Price Corridor Summary for {key}")
-        st.dataframe(corridor_summary[key])
-        st.write(f"Price Corridor Plot for {key}")
-        st.plotly_chart(plots_dict[key], use_container_width=True)
-        corridor_summary_analyze = corridor_summary[key].copy()
-        corridor_summary_analyze.sort_values(by='correlation',inplace=True)
-        idx = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.7),"price_corridor"].unique()
-        idx1 = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.4)&(corridor_summary_analyze["correlation"]>-0.7),"price_corridor"].unique()
-        if idx.any() or idx1.any():
-            st.markdown("**Observations :**")
-            for id in idx:
-                st.write(f"The corridor no {id} has a high impact on the volume share")
-            for id in idx1:
-                st.write(f"The corridor no {id} has a decent impact on the volume share")
-        st.markdown("----")
+        with tabs[st.session_state.filter_tabs_corridor.index(key)]:
+            st.markdown(f"<h3>{key} :</h3>", unsafe_allow_html=True)
+            if optimal_clusters!={}:
+                st.markdown(f"Optimal number of clusters for {key} is {optimal_clusters[key]}")
+            st.write(f"Price Corridor Summary for {key}")
+            st.dataframe(corridor_summary[key])
+            st.write(f"Price Corridor Plot for {key}")
+            st.plotly_chart(plots_dict[key], use_container_width=True)
+            corridor_summary_analyze = corridor_summary[key].copy()
+            corridor_summary_analyze.sort_values(by='correlation',inplace=True)
+            idx = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.7),"price_corridor"].unique()
+            idx1 = corridor_summary_analyze.loc[(corridor_summary_analyze["correlation"]<=-0.4)&(corridor_summary_analyze["correlation"]>-0.7),"price_corridor"].unique()
+            if idx.any() or idx1.any():
+                st.markdown("**Observations :**")
+                for id in idx:
+                    st.write(f"The corridor no {id} has a high impact on the volume share")
+                for id in idx1:
+                    st.write(f"The corridor no {id} has a decent impact on the volume share")
+            st.markdown("----")
 
 def append_data_in_rows_openpyxl(wb, sheet_name, data_work, start_row, start_col):
     ws = wb[sheet_name]
